@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CMD 锁定，自动后台开链接 - 一手吃东西不影响
 // @namespace    http://tampermonkey.net/
-// @version      1.0.1
+// @version      1.0.2
 // @description  左下角图标点击锁定/解锁，自动后台打开新标签页，无需按住 CMD 键。作者：wlzh
 // @author       maq
 // @match        *://*/*
@@ -15,6 +15,9 @@
     // 状态变量
     let cmdLocked = false;
     let isDragging = false;
+    let hasMoved = false;
+    let startX = 0;
+    let startY = 0;
     let dragOffsetX = 0;
     let dragOffsetY = 0;
 
@@ -173,6 +176,9 @@
     cmdBtn.addEventListener('mousedown', (e) => {
         if (e.button === 0) { // 左键
             isDragging = true;
+            hasMoved = false;
+            startX = e.clientX;
+            startY = e.clientY;
             const rect = cmdBtn.getBoundingClientRect();
             dragOffsetX = e.clientX - rect.left;
             dragOffsetY = e.clientY - rect.top;
@@ -183,6 +189,17 @@
 
     document.addEventListener('mousemove', (e) => {
         if (isDragging) {
+            // 检测是否有明显移动（超过 3 像素）
+            if (!hasMoved) {
+                const moveDistance = Math.sqrt(
+                    Math.pow(e.clientX - startX, 2) +
+                    Math.pow(e.clientY - startY, 2)
+                );
+                if (moveDistance > 3) {
+                    hasMoved = true;
+                }
+            }
+
             let newX = e.clientX - dragOffsetX;
             let newY = e.clientY - dragOffsetY;
 
@@ -197,15 +214,15 @@
 
     document.addEventListener('mouseup', (e) => {
         if (isDragging) {
-            const hasMoved = Math.abs(e.clientX - dragOffsetX - parseFloat(cmdBtn.style.left)) > 5 ||
-                           Math.abs(e.clientY - dragOffsetY - parseFloat(cmdBtn.style.top)) > 5;
             isDragging = false;
             cmdBtn.style.cursor = 'move';
-            savePosition();
 
-            // 如果没有明显移动，则视为点击
-            if (!hasMoved || Math.abs(e.clientX - dragOffsetX - parseFloat(cmdBtn.style.left)) < 3) {
+            // 只有在未移动（或移动距离很小）时才切换状态
+            if (!hasMoved) {
                 updateCmdState(!cmdLocked);
+            } else {
+                // 移动过，保存新位置
+                savePosition();
             }
         }
     });
