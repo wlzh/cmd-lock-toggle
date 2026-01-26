@@ -3,7 +3,7 @@
 // @namespace    http://tampermonkey.net/
 // @version      1.0.2
 // @description  左下角图标点击锁定/解锁，自动后台打开新标签页，无需按住 CMD 键。作者：wlzh
-// @author       maq
+// @author       wlzh
 // @match        *://*/*
 // @grant        GM_openInTab
 // @run-at       document-end
