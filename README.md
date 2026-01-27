@@ -76,9 +76,20 @@
 
 A: 检查图标是否变为绿色（锁定状态），灰色表示未锁定。
 
-### Q: 如何重置图标位置？
+### Q: 找不到按钮图标了怎么办？
 
-A: 右键图标 → 关于 → 在控制台输入 `localStorage.removeItem('cmdLockPosition')` 然后刷新页面。
+A: 如果某些网站或页面找不到按钮图标，可能是之前保存的位置数据导致图标显示在屏幕外。可以执行以下步骤清除旧位置数据：
+
+1. 按 `F12` 打开浏览器开发者工具
+2. 切换到 **Console (控制台)** 标签
+3. 运行以下命令：
+
+```javascript
+localStorage.removeItem('cmdLockPosition');
+location.reload();
+```
+
+4. 页面会自动刷新，图标将恢复到默认位置
 
 ### Q: 支持哪些网站？
 
