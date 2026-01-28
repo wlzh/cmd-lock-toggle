@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CMD 锁定，自动后台开链接 - 一手吃东西不影响
 // @namespace    http://tampermonkey.net/
-// @version      1.0.2
+// @version      1.0.3
 // @description  左下角图标点击锁定/解锁，自动后台打开新标签页，无需按住 CMD 键。作者：wlzh
 // @author       wlzh
 // @match        *://*/*
@@ -23,7 +23,26 @@
 
     // 从 localStorage 读取位置
     const savedPos = localStorage.getItem('cmdLockPosition');
-    let position = savedPos ? JSON.parse(savedPos) : { x: 20, y: window.innerHeight - 70 };
+    let position = { x: 20, y: window.innerHeight - 70 }; // 默认位置
+
+    if (savedPos) {
+        try {
+            const parsed = JSON.parse(savedPos);
+            // 验证保存的位置是否合理（在可视区域内）
+            const maxX = window.innerWidth - 44;
+            const maxY = window.innerHeight - 44;
+            if (parsed.x >= 0 && parsed.x <= maxX && parsed.y >= 0 && parsed.y <= maxY) {
+                position = parsed;
+            } else {
+                // 位置不合理，清除并使用默认位置
+                console.log('CMD 锁定: 保存的位置超出可视范围，使用默认位置');
+                localStorage.removeItem('cmdLockPosition');
+            }
+        } catch (e) {
+            console.log('CMD 锁定: 读取位置失败，使用默认位置', e);
+            localStorage.removeItem('cmdLockPosition');
+        }
+    }
 
     // 创建主按钮
     const cmdBtn = document.createElement('div');
@@ -294,25 +313,72 @@
     document.body.appendChild(cmdBtn);
     document.body.appendChild(contextMenu);
 
-    // 窗口大小改变时确保按钮在视野内
-    window.addEventListener('resize', () => {
+    // 确保按钮可见且在可视区域内
+    function ensureButtonVisible() {
         const rect = cmdBtn.getBoundingClientRect();
+        const maxX = window.innerWidth - 44;
+        const maxY = window.innerHeight - 44;
+        let needsUpdate = false;
         let newX = rect.left;
         let newY = rect.top;
 
-        if (rect.right > window.innerWidth) {
-            newX = window.innerWidth - 44;
-        }
-        if (rect.bottom > window.innerHeight) {
-            newY = window.innerHeight - 44;
+        // 检查是否超出可视区域
+        if (rect.right <= 0 || rect.left >= window.innerWidth ||
+            rect.bottom <= 0 || rect.top >= window.innerHeight) {
+            // 完全在可视区域外，重置到默认位置
+            newX = 20;
+            newY = Math.max(20, window.innerHeight - 70);
+            needsUpdate = true;
+            console.log('CMD 锁定: 按钮不在可视区域，重置位置');
+        } else {
+            // 部分超出，调整到边缘
+            if (rect.right > window.innerWidth) {
+                newX = maxX;
+                needsUpdate = true;
+            }
+            if (rect.bottom > window.innerHeight) {
+                newY = maxY;
+                needsUpdate = true;
+            }
+            if (rect.left < 0) {
+                newX = 0;
+                needsUpdate = true;
+            }
+            if (rect.top < 0) {
+                newY = 0;
+                needsUpdate = true;
+            }
         }
 
-        if (newX !== rect.left || newY !== rect.top) {
+        if (needsUpdate) {
             cmdBtn.style.left = newX + 'px';
             cmdBtn.style.top = newY + 'px';
-            savePosition();
+            position = { x: newX, y: newY };
+            localStorage.setItem('cmdLockPosition', JSON.stringify(position));
         }
+
+        // 确保按钮可见（没有被其他元素遮挡）
+        cmdBtn.style.display = 'flex';
+        cmdBtn.style.visibility = 'visible';
+        cmdBtn.style.opacity = '1';
+    }
+
+    // 页面加载完成后立即检查
+    ensureButtonVisible();
+
+    // 窗口大小改变时确保按钮在视野内
+    window.addEventListener('resize', () => {
+        ensureButtonVisible();
     });
+
+    // 定期检查按钮可见性（防止页面动态内容遮挡）
+    setInterval(() => {
+        const rect = cmdBtn.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) {
+            console.log('CMD 锁定: 检测到按钮被隐藏，恢复显示');
+            ensureButtonVisible();
+        }
+    }, 5000);
 
     console.log('CMD 锁定切换脚本已加载 - 作者：wlzh');
 })();
