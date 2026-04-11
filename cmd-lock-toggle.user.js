@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CMD 锁定，自动后台开链接 - 一手吃东西不影响
 // @namespace    http://tampermonkey.net/
-// @version      1.0.8
+// @version      1.0.9
 // @description  左下角图标点击锁定/解锁，自动后台打开新标签页，无需按住 CMD 键。作者：wlzh
 // @author       wlzh
 // @match        *://*/*
@@ -160,6 +160,10 @@
         .resize-handle {
             position: absolute; width: ${HANDLE_SIZE}px; height: ${HANDLE_SIZE}px;
             background: rgba(0,0,0,0.15); border-radius: 2px; z-index: 10;
+            display: none;
+        }
+        .cmd-lock-btn-instance.watermark-mode.show-handles .resize-handle {
+            display: block;
         }
         .resize-handle.rb { right: 0; bottom: 0; cursor: nwse-resize; }
         .resize-handle.rt { right: 0; top: 0; cursor: nesw-resize; }
@@ -320,6 +324,21 @@
     // 移除水印样式
     function removeWatermarkStyle(btn) {
         btn.classList.remove('watermark-mode');
+        btn.classList.remove('show-handles');
+    }
+
+    // 显示 resize 手柄，2 秒后自动隐藏
+    let handleTimers = [];
+    function showHandlesBriefly() {
+        handleTimers.forEach(t => clearTimeout(t));
+        handleTimers = [];
+        buttons.forEach(b => {
+            b.el.classList.add('show-handles');
+        });
+        const timer = setTimeout(() => {
+            buttons.forEach(b => b.el.classList.remove('show-handles'));
+        }, 2000);
+        handleTimers.push(timer);
     }
 
     // 进入水印模式
@@ -330,6 +349,8 @@
             watermarkText = input.trim();
         }
         watermarkMode = true;
+        handleTimers.forEach(t => clearTimeout(t));
+        handleTimers = [];
 
         buttons.forEach(b => {
             applyWatermarkStyle(b.el, b.locked);
@@ -637,7 +658,10 @@
             b.isDragging = false;
             b.el.style.cursor = 'move';
             // 水印模式和普通模式：点击都切换锁定状态
-            if (!b.hasMoved) updateBtnState(i, !b.locked);
+            if (!b.hasMoved) {
+                updateBtnState(i, !b.locked);
+                if (watermarkMode) showHandlesBriefly();
+            }
             else saveState();
         });
     });
@@ -776,7 +800,7 @@
             case 'setWatermarkText': setWatermarkText(); break;
             case 'setWatermarkOpacity': setWatermarkOpacity(); break;
             case 'about':
-                alert('CMD 锁定切换 v1.0.8\n\n作者：wlzh\n\n一手吃东西，一手用鼠标，也能轻松新标签页打开链接！\n\n功能：\n- 点击图标锁定/解锁 CMD 键\n- 可拖动位置，支持多个按钮\n- 右键增减按钮（可设数量）\n- 按百分比放大/缩小（可设比例）\n- 支持圆形/正方形/长方形切换\n- 水印模式：纯文字水印，可设文字和透明度');
+                alert('CMD 锁定切换 v1.0.9\n\n作者：wlzh\n\n一手吃东西，一手用鼠标，也能轻松新标签页打开链接！\n\n功能：\n- 点击图标锁定/解锁 CMD 键\n- 可拖动位置，支持多个按钮\n- 右键增减按钮（可设数量）\n- 按百分比放大/缩小（可设比例）\n- 支持圆形/正方形/长方形切换\n- 水印模式：纯文字水印，可设文字和透明度');
                 break;
         }
         hideMenu();
@@ -842,5 +866,5 @@
         });
     }, 5000);
 
-    console.log('CMD 锁定切换脚本已加载 v1.0.8 - 作者：wlzh');
+    console.log('CMD 锁定切换脚本已加载 v1.0.9 - 作者：wlzh');
 })();
