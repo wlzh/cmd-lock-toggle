@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CMD 锁定，自动后台开链接 - 一手吃东西不影响
 // @namespace    http://tampermonkey.net/
-// @version      1.0.5
+// @version      1.0.6
 // @description  左下角图标点击锁定/解锁，自动后台打开新标签页，无需按住 CMD 键。作者：wlzh
 // @author       wlzh
 // @match        *://*/*
@@ -13,9 +13,9 @@
     'use strict';
 
     // 配置常量
-    const DEFAULT_SIZE = 44;
-    const SIZE_MIN = DEFAULT_SIZE * 0.1;   // 4.4px - 默认值的 10%
-    const SIZE_MAX = DEFAULT_SIZE * 5;     // 220px - 默认值的 5 倍
+    const DEFAULT_SIZE = 22;
+    const SIZE_MIN = DEFAULT_SIZE * 0.3;   // 6.6px - 默认值的 30%
+    const SIZE_MAX = DEFAULT_SIZE * 5;     // 110px - 默认值的 5 倍
     const RECT_WIDTH_RATIO = 1.6;          // 长方形宽高比
     const MAX_BTN_COUNT = 20;              // 最大按钮总数
     const DRAG_THRESHOLD = 3;
@@ -572,7 +572,7 @@
                 changeShape(item.dataset.shape);
                 break;
             case 'about':
-                alert('CMD 锁定切换 v1.0.5\n\n作者：wlzh\n\n一手吃东西，一手用鼠标，也能轻松新标签页打开链接！\n\n功能：\n- 点击图标锁定/解锁 CMD 键\n- 可拖动位置，支持多个按钮\n- 右键增减按钮（可设数量）\n- 按百分比放大/缩小（可设比例）\n- 支持圆形/正方形/长方形切换');
+                alert('CMD 锁定切换 v1.0.6\n\n作者：wlzh\n\n一手吃东西，一手用鼠标，也能轻松新标签页打开链接！\n\n功能：\n- 点击图标锁定/解锁 CMD 键\n- 可拖动位置，支持多个按钮\n- 右键增减按钮（可设数量）\n- 按百分比放大/缩小（可设比例）\n- 支持圆形/正方形/长方形切换');
                 break;
         }
         hideMenu();
@@ -659,5 +659,5 @@
         });
     }, 5000);
 
-    console.log('CMD 锁定切换脚本已加载 v1.0.5 - 作者：wlzh');
+    console.log('CMD 锁定切换脚本已加载 v1.0.6 - 作者：wlzh');
 })();
