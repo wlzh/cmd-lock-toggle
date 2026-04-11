@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CMD 锁定，自动后台开链接 - 一手吃东西不影响
 // @namespace    http://tampermonkey.net/
-// @version      1.0.7
+// @version      1.0.8
 // @description  左下角图标点击锁定/解锁，自动后台打开新标签页，无需按住 CMD 键。作者：wlzh
 // @author       wlzh
 // @match        *://*/*
@@ -114,23 +114,23 @@
     // 菜单样式
     Object.assign(contextMenu.style, {
         position: 'fixed', display: 'none', backgroundColor: '#2c2c2c',
-        border: '1px solid #444', borderRadius: '8px', padding: '4px 0',
+        border: '1px solid #444', borderRadius: '8px', padding: '2px 0',
         minWidth: '180px', zIndex: '999999',
-        boxShadow: '0 4px 20px rgba(0,0,0,0.5)', fontSize: '14px',
+        boxShadow: '0 4px 20px rgba(0,0,0,0.5)', fontSize: '13px',
     });
 
     // 注入 CSS
     const style = document.createElement('style');
     style.textContent = `
         #cmd-lock-menu .menu-item {
-            padding: 10px 16px; cursor: pointer; display: flex; align-items: center;
-            gap: 10px; color: #e0e0e0; transition: background-color 0.15s;
+            padding: 6px 14px; cursor: pointer; display: flex; align-items: center;
+            gap: 8px; color: #e0e0e0; transition: background-color 0.15s;
         }
         #cmd-lock-menu .menu-item:hover { background-color: #4a4a4a; }
         #cmd-lock-menu .menu-item svg { flex-shrink: 0; }
-        #cmd-lock-menu .menu-divider { height: 1px; background-color: #444; margin: 4px 0; }
-        #cmd-lock-menu .menu-check { width: 16px; text-align: center; flex-shrink: 0; }
-        #cmd-lock-menu .menu-setting { color: #999; font-size: 12px; }
+        #cmd-lock-menu .menu-divider { height: 1px; background-color: #444; margin: 2px 0; }
+        #cmd-lock-menu .menu-check { width: 14px; text-align: center; flex-shrink: 0; }
+        #cmd-lock-menu .menu-setting { color: #999; font-size: 11px; }
         .cmd-lock-btn-instance {
             position: fixed; cursor: move; z-index: 999999; display: flex;
             align-items: center; justify-content: center;
@@ -142,25 +142,24 @@
         .cmd-lock-btn-instance:active { transform: scale(0.95); }
         .cmd-lock-btn-instance.locked { box-shadow: 0 0 15px rgba(76, 175, 80, 0.6); }
         .cmd-lock-btn-instance.watermark-mode {
-            opacity: 1 !important;
-            background-color: rgba(0,0,0,0.06) !important;
-            border: 1px dashed rgba(0,0,0,0.15);
-            border-radius: 4px !important;
-            box-shadow: none;
+            background: none !important;
+            border: none !important;
+            border-radius: 0 !important;
+            box-shadow: none !important;
             overflow: hidden;
         }
         .cmd-lock-btn-instance.watermark-mode:hover { transform: none; }
         .cmd-lock-btn-instance.watermark-mode:active { transform: none; }
-        .cmd-lock-btn-instance.watermark-mode.locked { box-shadow: none; }
+        .cmd-lock-btn-instance.watermark-mode.locked { box-shadow: none !important; }
         .watermark-text {
             width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
             word-break: break-all; white-space: pre-wrap; text-align: center;
-            color: rgba(0,0,0,0.25); pointer-events: none; padding: 4px;
+            pointer-events: none; padding: 4px;
             font-size: 12px; line-height: 1.4; overflow: hidden;
         }
         .resize-handle {
             position: absolute; width: ${HANDLE_SIZE}px; height: ${HANDLE_SIZE}px;
-            background: rgba(0,0,0,0.25); border-radius: 2px; z-index: 10;
+            background: rgba(0,0,0,0.15); border-radius: 2px; z-index: 10;
         }
         .resize-handle.rb { right: 0; bottom: 0; cursor: nwse-resize; }
         .resize-handle.rt { right: 0; top: 0; cursor: nesw-resize; }
@@ -295,16 +294,19 @@
     // ==================== 水印模式 ====================
 
     // 应用水印样式到单个按钮
-    function applyWatermarkStyle(btn) {
+    function applyWatermarkStyle(btn, locked) {
         btn.classList.add('watermark-mode');
         btn.classList.remove('locked');
         btn.style.width = watermarkWidth + 'px';
         btn.style.height = watermarkHeight + 'px';
-        btn.style.borderRadius = '4px';
+        btn.style.borderRadius = '0';
+        btn.style.backgroundColor = 'transparent';
 
-        // 计算字体大小：基于较小的维度
+        // 字体大小基于较小维度
         const fontSize = Math.max(10, Math.round(Math.min(watermarkWidth, watermarkHeight) * 0.15));
-        btn.innerHTML = `<span class="watermark-text" style="font-size:${fontSize}px; opacity:${watermarkOpacity / 100}">${watermarkText}</span>`;
+        // 透明度只影响文字颜色，背景完全透明
+        const color = locked ? `rgba(76, 175, 80, ${watermarkOpacity / 100})` : `rgba(0, 0, 0, ${watermarkOpacity / 100})`;
+        btn.innerHTML = `<span class="watermark-text" style="font-size:${fontSize}px; color:${color}">${watermarkText}</span>`;
 
         // 添加 resize 手柄
         ['rb', 'rt', 'lb', 'lt'].forEach(pos => {
@@ -330,7 +332,7 @@
         watermarkMode = true;
 
         buttons.forEach(b => {
-            applyWatermarkStyle(b.el);
+            applyWatermarkStyle(b.el, b.locked);
             // 确保不超出窗口
             const rect = b.el.getBoundingClientRect();
             let x = rect.left, y = rect.top;
@@ -398,7 +400,10 @@
         if (watermarkMode) {
             buttons.forEach(b => {
                 const textEl = b.el.querySelector('.watermark-text');
-                if (textEl) textEl.style.opacity = watermarkOpacity / 100;
+                if (textEl) {
+                    const color = b.locked ? `rgba(76, 175, 80, ${watermarkOpacity / 100})` : `rgba(0, 0, 0, ${watermarkOpacity / 100})`;
+                    textEl.style.color = color;
+                }
             });
         }
         saveState();
@@ -437,7 +442,7 @@
         });
 
         if (watermarkMode) {
-            applyWatermarkStyle(btn);
+            applyWatermarkStyle(btn, state.locked);
         } else {
             applyShapeStyle(btn);
             updateButtonAppearance(btn, state.locked);
@@ -526,14 +531,24 @@
     function updateBtnState(index, locked) {
         buttons[index].locked = locked;
         const btn = buttons[index].el;
-        if (locked) {
-            btn.classList.add('locked');
-            btn.style.backgroundColor = '#4CAF50';
+
+        if (watermarkMode) {
+            // 水印模式：只改文字颜色
+            const textEl = btn.querySelector('.watermark-text');
+            if (textEl) {
+                const color = locked ? `rgba(76, 175, 80, ${watermarkOpacity / 100})` : `rgba(0, 0, 0, ${watermarkOpacity / 100})`;
+                textEl.style.color = color;
+            }
         } else {
-            btn.classList.remove('locked');
-            btn.style.backgroundColor = '#666';
+            if (locked) {
+                btn.classList.add('locked');
+                btn.style.backgroundColor = '#4CAF50';
+            } else {
+                btn.classList.remove('locked');
+                btn.style.backgroundColor = '#666';
+            }
+            updateButtonAppearance(btn, locked);
         }
-        updateButtonAppearance(btn, locked);
         saveState();
     }
 
@@ -579,6 +594,8 @@
                     const textEl = bb.el.querySelector('.watermark-text');
                     if (textEl) {
                         textEl.style.fontSize = Math.max(10, Math.round(Math.min(newW, newH) * 0.15)) + 'px';
+                        const color = bb.locked ? `rgba(76, 175, 80, ${watermarkOpacity / 100})` : `rgba(0, 0, 0, ${watermarkOpacity / 100})`;
+                        textEl.style.color = color;
                     }
                 });
                 return;
@@ -604,14 +621,12 @@
         buttons.forEach((b, i) => {
             if (b.isResizing) {
                 b.isResizing = false;
-                // 确保所有按钮不超出窗口
                 buttons.forEach(bb => {
                     const rect = bb.el.getBoundingClientRect();
                     let x = rect.left, y = rect.top;
                     if (x > window.innerWidth - watermarkWidth) x = window.innerWidth - watermarkWidth;
                     if (y > window.innerHeight - watermarkHeight) y = window.innerHeight - watermarkHeight;
-                    if (x < 0) x = 0;
-                    if (y < 0) y = 0;
+                    if (x < 0) x = 0; if (y < 0) y = 0;
                     bb.el.style.left = x + 'px';
                     bb.el.style.top = y + 'px';
                 });
@@ -621,6 +636,7 @@
             if (!b.isDragging) return;
             b.isDragging = false;
             b.el.style.cursor = 'move';
+            // 水印模式和普通模式：点击都切换锁定状态
             if (!b.hasMoved) updateBtnState(i, !b.locked);
             else saveState();
         });
@@ -760,7 +776,7 @@
             case 'setWatermarkText': setWatermarkText(); break;
             case 'setWatermarkOpacity': setWatermarkOpacity(); break;
             case 'about':
-                alert('CMD 锁定切换 v1.0.7\n\n作者：wlzh\n\n一手吃东西，一手用鼠标，也能轻松新标签页打开链接！\n\n功能：\n- 点击图标锁定/解锁 CMD 键\n- 可拖动位置，支持多个按钮\n- 右键增减按钮（可设数量）\n- 按百分比放大/缩小（可设比例）\n- 支持圆形/正方形/长方形切换\n- 水印模式：按钮变半透明水印，可设文字和透明度');
+                alert('CMD 锁定切换 v1.0.8\n\n作者：wlzh\n\n一手吃东西，一手用鼠标，也能轻松新标签页打开链接！\n\n功能：\n- 点击图标锁定/解锁 CMD 键\n- 可拖动位置，支持多个按钮\n- 右键增减按钮（可设数量）\n- 按百分比放大/缩小（可设比例）\n- 支持圆形/正方形/长方形切换\n- 水印模式：纯文字水印，可设文字和透明度');
                 break;
         }
         hideMenu();
@@ -826,5 +842,5 @@
         });
     }, 5000);
 
-    console.log('CMD 锁定切换脚本已加载 v1.0.7 - 作者：wlzh');
+    console.log('CMD 锁定切换脚本已加载 v1.0.8 - 作者：wlzh');
 })();
