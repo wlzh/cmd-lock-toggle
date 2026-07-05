@@ -131,6 +131,11 @@ MIT License
 
 ## 更新日志
 
+### v1.1.1 (2026-07-05)
+- **修复 Chrome 下话题阅读数不增加的问题** - 对齐已验证可用的 Discourse pageview 行为
+- `/pageview` 只发送轻量 Discourse 追踪头，减少额外请求头导致的识别差异
+- 只有响应头确认 `x-discourse-browserpageview` 或 `x-discourse-trackview` 为 `1` 时才缓存成功，避免 HTTP 200 误判后阻止后续 fallback
+
 ### v1.1.0 (2026-07-05)
 - **新增 Linux.do / IDCFlare 话题浏览计数补发** - 后台新标签打开话题时自动发送 Discourse 浏览追踪请求
 - 支持普通未锁定左键、锁定后普通左键后台打开、Ctrl/Cmd/Shift/Alt + 左键、中键点击的浏览计数补发

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CMD 锁定，自动后台开链接 - 一手吃东西不影响
 // @namespace    http://tampermonkey.net/
-// @version      1.1.0
+// @version      1.1.1
 // @description  左下角图标点击锁定/解锁，自动后台打开新标签页；Linux.do/IDCFlare 话题新标签打开自动补发浏览计数。作者：wlzh
 // @author       wlzh
 // @match        *://*/*
@@ -22,13 +22,13 @@
     const HANDLE_SIZE = 8;
     const DISCOURSE_TRACK_CONFIG = {
         supportedHosts: ['linux.do', 'idcflare.com'],
-        pendingTtlMs: 30 * 1000,
+        pendingTtlMs: 120 * 1000,
         doneTtlMs: 8 * 60 * 60 * 1000,
         topicPageFallbackDelaysMs: [2500, 10000],
         fetchTimeoutMs: 8000,
         enableTopicJsonFallback: true,
         debugKey: 'cmd-lock-discourse-track-debug',
-        prefix: 'cmd-lock-discourse-track-v1.1.0:',
+        prefix: 'cmd-lock-discourse-track-v1.1.1:',
         oldPrefixes: [
             'discourse-track-view-success:',
             'discourse-track-view-attempt:',
@@ -746,9 +746,9 @@
         return token;
     }
 
-    function markDiscourseTrackDone(info, token, result) {
+    function markDiscourseTrackConfirmed(info, token, result) {
         writeDiscourseState(info, {
-            status: result.confirmed ? 'confirmed' : 'accepted',
+            status: 'confirmed',
             token,
             result,
             createdAt: Date.now(),
@@ -794,8 +794,6 @@
 
     function buildDiscoursePageviewHeaders(info, referrerUrl) {
         return {
-            ...buildDiscourseCommonHeaders(),
-            'Discourse-Present': 'true',
             'Discourse-Track-View-Deferred': 'true',
             'Discourse-Track-View-Topic-Id': String(info.topicId),
             'Discourse-Track-View-Url': info.url.href,
@@ -873,10 +871,6 @@
         return false;
     }
 
-    function isAcceptedDiscourseAttempt(result) {
-        return Boolean(result && result.ok);
-    }
-
     async function sendDiscourseTrackRequest(info, referrerUrl) {
         const attempts = [];
 
@@ -902,11 +896,10 @@
             }
         }
 
-        const accepted = attempts.some(isAcceptedDiscourseAttempt);
         return {
             confirmed: false,
-            accepted,
-            confirmedBy: accepted ? 'http-ok-without-track-header' : null,
+            accepted: false,
+            confirmedBy: null,
             attempts,
         };
     }
@@ -922,11 +915,11 @@
             const result = await sendDiscourseTrackRequest(info, referrerUrl);
             discourseLog('track result', { source, topicId: info.topicId, result });
 
-            if (result.confirmed || result.accepted) {
-                markDiscourseTrackDone(info, token, result);
+            if (result.confirmed) {
+                markDiscourseTrackConfirmed(info, token, result);
             } else {
                 clearDiscourseStateIfTokenMatches(info, token);
-                discourseWarn('track not accepted', { source, topicId: info.topicId, result });
+                discourseWarn('track not confirmed', { source, topicId: info.topicId, result });
             }
         } catch (error) {
             clearDiscourseStateIfTokenMatches(info, token);
@@ -1177,7 +1170,7 @@
             case 'setWatermarkText': setWatermarkText(); break;
             case 'setWatermarkOpacity': setWatermarkOpacity(); break;
             case 'about':
-                alert('CMD 锁定切换 v1.1.0\n\n作者：wlzh\n\n一手吃东西，一手用鼠标，也能轻松新标签页打开链接！\n\n功能：\n- 点击图标锁定/解锁 CMD 键\n- 可拖动位置，支持多个按钮\n- 右键增减按钮（可设数量）\n- 按百分比放大/缩小（可设比例）\n- 支持圆形/正方形/长方形切换\n- 水印模式：纯文字水印，可设文字和透明度\n- Linux.do / IDCFlare 话题新标签打开自动补发浏览计数');
+                alert('CMD 锁定切换 v1.1.1\n\n作者：wlzh\n\n一手吃东西，一手用鼠标，也能轻松新标签页打开链接！\n\n功能：\n- 点击图标锁定/解锁 CMD 键\n- 可拖动位置，支持多个按钮\n- 右键增减按钮（可设数量）\n- 按百分比放大/缩小（可设比例）\n- 支持圆形/正方形/长方形切换\n- 水印模式：纯文字水印，可设文字和透明度\n- Linux.do / IDCFlare 话题新标签打开自动补发浏览计数');
                 break;
         }
         hideMenu();
@@ -1278,5 +1271,5 @@
         });
     };
 
-    console.log('CMD 锁定切换脚本已加载 v1.1.0 - 作者：wlzh');
+    console.log('CMD 锁定切换脚本已加载 v1.1.1 - 作者：wlzh');
 })();
