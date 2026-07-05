@@ -34,7 +34,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 2. `README.md` 的更新日志（最新版本在最上方）
 3. 关于对话框中的版本号（`alert(...)` 内的字符串）
 
-版本号格式：`1.x.x`，当前为 `1.1.1`。
+版本号格式：`1.x.x`，当前为 `1.1.2`。
 
 ## 提交规范
 

@@ -131,6 +131,11 @@ MIT License
 
 ## 更新日志
 
+### v1.1.2 (2026-07-05)
+- **降低 Discourse 追踪请求频率** - 对齐已验证可用脚本，只补发一次 `/pageview`，不再额外请求 `/t/{topicId}.json`
+- 话题页 fallback 保留单次 2.5 秒延迟，减少短时间重复请求导致的 `429 Too Many Requests`
+- 新增 `@noframes`，避免脚本在第三方 iframe / sandbox frame 中运行造成 CSP 报错和按钮恢复日志刷屏
+
 ### v1.1.1 (2026-07-05)
 - **修复 Chrome 下话题阅读数不增加的问题** - 对齐已验证可用的 Discourse pageview 行为
 - `/pageview` 只发送轻量 Discourse 追踪头，减少额外请求头导致的识别差异
