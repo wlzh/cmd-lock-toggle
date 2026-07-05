@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         CMD 锁定，自动后台开链接 - 一手吃东西不影响
 // @namespace    http://tampermonkey.net/
-// @version      1.0.9
-// @description  左下角图标点击锁定/解锁，自动后台打开新标签页，无需按住 CMD 键。作者：wlzh
+// @version      1.1.0
+// @description  左下角图标点击锁定/解锁，自动后台打开新标签页；Linux.do/IDCFlare 话题新标签打开自动补发浏览计数。作者：wlzh
 // @author       wlzh
 // @match        *://*/*
 // @grant        GM_openInTab
@@ -20,6 +20,23 @@
     const MAX_BTN_COUNT = 20;
     const DRAG_THRESHOLD = 3;
     const HANDLE_SIZE = 8;
+    const DISCOURSE_TRACK_CONFIG = {
+        supportedHosts: ['linux.do', 'idcflare.com'],
+        pendingTtlMs: 30 * 1000,
+        doneTtlMs: 8 * 60 * 60 * 1000,
+        topicPageFallbackDelaysMs: [2500, 10000],
+        fetchTimeoutMs: 8000,
+        enableTopicJsonFallback: true,
+        debugKey: 'cmd-lock-discourse-track-debug',
+        prefix: 'cmd-lock-discourse-track-v1.1.0:',
+        oldPrefixes: [
+            'discourse-track-view-success:',
+            'discourse-track-view-attempt:',
+            'discourse-track-view-v4.2:',
+            'discourse-track-view-v4.3:',
+            'discourse-track-view-v4.3.2:',
+        ],
+    };
 
     // 全局状态
     let btnSize = DEFAULT_SIZE;
@@ -585,6 +602,366 @@
 
     function hideMenu() { contextMenu.style.display = 'none'; }
 
+    // ==================== Discourse 浏览计数补发 ====================
+
+    const discourseMemoryStore = new Map();
+
+    function discourseDebugEnabled() {
+        return discourseSafeGetItem(DISCOURSE_TRACK_CONFIG.debugKey) === '1';
+    }
+
+    function discourseLog(...args) {
+        if (discourseDebugEnabled()) console.debug('[cmd-lock-discourse-track]', ...args);
+    }
+
+    function discourseWarn(...args) {
+        if (discourseDebugEnabled()) console.warn('[cmd-lock-discourse-track]', ...args);
+    }
+
+    function discourseSafeGetItem(key) {
+        try {
+            const value = localStorage.getItem(key);
+            return value === null ? discourseMemoryStore.get(key) || null : value;
+        } catch (e) {
+            return discourseMemoryStore.get(key) || null;
+        }
+    }
+
+    function discourseSafeSetItem(key, value) {
+        try {
+            localStorage.setItem(key, value);
+        } catch (e) {
+            discourseMemoryStore.set(key, value);
+        }
+    }
+
+    function discourseSafeRemoveItem(key) {
+        try {
+            localStorage.removeItem(key);
+        } catch (e) {}
+        discourseMemoryStore.delete(key);
+    }
+
+    function discourseSafeSessionGetItem(key) {
+        try {
+            return sessionStorage.getItem(key);
+        } catch (e) {
+            return discourseMemoryStore.get(`session:${key}`) || null;
+        }
+    }
+
+    function discourseSafeSessionSetItem(key, value) {
+        try {
+            sessionStorage.setItem(key, value);
+        } catch (e) {
+            discourseMemoryStore.set(`session:${key}`, value);
+        }
+    }
+
+    function cleanupOldDiscourseKeys() {
+        try {
+            for (const key of Object.keys(localStorage)) {
+                if (DISCOURSE_TRACK_CONFIG.oldPrefixes.some(prefix => key.startsWith(prefix))) {
+                    localStorage.removeItem(key);
+                }
+            }
+        } catch (e) {}
+    }
+
+    function discourseRandomId() {
+        if (globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function') {
+            return globalThis.crypto.randomUUID();
+        }
+        return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    }
+
+    function isSupportedDiscourseHost(hostname) {
+        return DISCOURSE_TRACK_CONFIG.supportedHosts.some(host => hostname === host || hostname.endsWith(`.${host}`));
+    }
+
+    function getDiscourseTopicInfo(rawUrl) {
+        let url;
+        try {
+            url = new URL(rawUrl || location.href, location.href);
+        } catch (e) {
+            return null;
+        }
+
+        if (!isSupportedDiscourseHost(url.hostname)) return null;
+
+        const parts = url.pathname.split('/').filter(Boolean);
+        const markerIndex = parts.findIndex(part => part === 't' || part === 'n');
+        if (markerIndex === -1) return null;
+
+        const topicId = parts.slice(markerIndex + 1).find(part => /^\d+$/.test(part));
+        if (!topicId) return null;
+
+        return { url, topicId: String(topicId) };
+    }
+
+    function getCurrentDiscourseTopicInfo() {
+        return getDiscourseTopicInfo(location.href);
+    }
+
+    function discourseStateKey(info) {
+        return `${DISCOURSE_TRACK_CONFIG.prefix}${info.url.hostname}:${info.topicId}`;
+    }
+
+    function readDiscourseState(info) {
+        try {
+            return JSON.parse(discourseSafeGetItem(discourseStateKey(info)) || 'null');
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function writeDiscourseState(info, state) {
+        discourseSafeSetItem(discourseStateKey(info), JSON.stringify(state));
+    }
+
+    function clearDiscourseStateIfTokenMatches(info, token) {
+        const state = readDiscourseState(info);
+        if (state && state.token === token) discourseSafeRemoveItem(discourseStateKey(info));
+    }
+
+    function hasFreshDiscourseState(info) {
+        const state = readDiscourseState(info);
+        return Boolean(state && state.expiresAt && state.expiresAt > Date.now());
+    }
+
+    function claimDiscourseTrack(info, source, force) {
+        if (!force && hasFreshDiscourseState(info)) {
+            discourseLog('skip fresh state', { source, topicId: info.topicId, state: readDiscourseState(info) });
+            return null;
+        }
+
+        const token = discourseRandomId();
+        writeDiscourseState(info, {
+            status: 'pending',
+            token,
+            source,
+            createdAt: Date.now(),
+            expiresAt: Date.now() + DISCOURSE_TRACK_CONFIG.pendingTtlMs,
+        });
+        return token;
+    }
+
+    function markDiscourseTrackDone(info, token, result) {
+        writeDiscourseState(info, {
+            status: result.confirmed ? 'confirmed' : 'accepted',
+            token,
+            result,
+            createdAt: Date.now(),
+            expiresAt: Date.now() + DISCOURSE_TRACK_CONFIG.doneTtlMs,
+        });
+    }
+
+    function getMetaContent(name) {
+        return document.querySelector(`meta[name="${name}"]`)?.content || '';
+    }
+
+    function getDiscourseBasePath() {
+        return (getMetaContent('discourse-base-uri') || '').replace(/\/$/, '');
+    }
+
+    function getCsrfToken() {
+        return getMetaContent('csrf-token');
+    }
+
+    function getDiscourseTrackingSessionId() {
+        const metaValue = getMetaContent('discourse-track-view-session-id');
+        if (metaValue) return metaValue;
+
+        const key = `${DISCOURSE_TRACK_CONFIG.prefix}session-id`;
+        let value = discourseSafeSessionGetItem(key);
+        if (!value) {
+            value = discourseRandomId();
+            discourseSafeSessionSetItem(key, value);
+        }
+        return value;
+    }
+
+    function buildDiscourseCommonHeaders() {
+        const headers = {
+            Accept: 'application/json, text/javascript, */*; q=0.01',
+            'X-Requested-With': 'XMLHttpRequest',
+        };
+
+        const csrfToken = getCsrfToken();
+        if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+        return headers;
+    }
+
+    function buildDiscoursePageviewHeaders(info, referrerUrl) {
+        return {
+            ...buildDiscourseCommonHeaders(),
+            'Discourse-Present': 'true',
+            'Discourse-Track-View-Deferred': 'true',
+            'Discourse-Track-View-Topic-Id': String(info.topicId),
+            'Discourse-Track-View-Url': info.url.href,
+            'Discourse-Track-View-Referrer': referrerUrl || document.referrer || '',
+            'Discourse-Track-View-Session-Id': getDiscourseTrackingSessionId(),
+        };
+    }
+
+    function buildDiscourseTopicJsonHeaders(info) {
+        return {
+            ...buildDiscourseCommonHeaders(),
+            'Discourse-Present': 'true',
+            'Discourse-Track-View': 'true',
+            'Discourse-Track-View-Topic-Id': String(info.topicId),
+        };
+    }
+
+    async function fetchWithTimeout(url, options, timeoutMs) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), timeoutMs);
+        try {
+            return await fetch(url, { ...options, signal: controller.signal });
+        } finally {
+            clearTimeout(timer);
+        }
+    }
+
+    function readDiscourseResponseResult(endpoint, response) {
+        return {
+            endpoint,
+            status: response.status,
+            ok: response.ok,
+            trackView: response.headers.get('x-discourse-trackview'),
+            browserPageView: response.headers.get('x-discourse-browserpageview'),
+            url: response.url,
+        };
+    }
+
+    function serializeDiscourseError(error) {
+        return {
+            name: error?.name || 'Error',
+            message: error?.message || String(error),
+        };
+    }
+
+    async function sendDiscoursePageview(info, referrerUrl) {
+        const url = `${info.url.origin}${getDiscourseBasePath()}/pageview`;
+        const response = await fetchWithTimeout(url, {
+            method: 'POST',
+            credentials: 'same-origin',
+            cache: 'no-store',
+            keepalive: true,
+            headers: buildDiscoursePageviewHeaders(info, referrerUrl),
+        }, DISCOURSE_TRACK_CONFIG.fetchTimeoutMs);
+        return readDiscourseResponseResult('pageview', response);
+    }
+
+    async function sendDiscourseTopicJsonTrack(info) {
+        const url = `${info.url.origin}${getDiscourseBasePath()}/t/${info.topicId}.json?track_visit=true&forceLoad=true`;
+        const response = await fetchWithTimeout(url, {
+            method: 'GET',
+            credentials: 'same-origin',
+            cache: 'no-store',
+            headers: buildDiscourseTopicJsonHeaders(info),
+        }, DISCOURSE_TRACK_CONFIG.fetchTimeoutMs);
+        return readDiscourseResponseResult('topic-json-fallback', response);
+    }
+
+    function isConfirmedDiscourseAttempt(result) {
+        if (!result) return false;
+        if (result.browserPageView === '1') return true;
+        if (result.trackView === '1') return true;
+        if (result.browserPageView === '0') return false;
+        if (result.trackView === '0') return false;
+        return false;
+    }
+
+    function isAcceptedDiscourseAttempt(result) {
+        return Boolean(result && result.ok);
+    }
+
+    async function sendDiscourseTrackRequest(info, referrerUrl) {
+        const attempts = [];
+
+        try {
+            const pageviewResult = await sendDiscoursePageview(info, referrerUrl);
+            attempts.push(pageviewResult);
+            if (isConfirmedDiscourseAttempt(pageviewResult)) {
+                return { confirmed: true, accepted: true, confirmedBy: 'pageview-header', attempts };
+            }
+        } catch (error) {
+            attempts.push({ endpoint: 'pageview', ok: false, error: serializeDiscourseError(error) });
+        }
+
+        if (DISCOURSE_TRACK_CONFIG.enableTopicJsonFallback) {
+            try {
+                const jsonResult = await sendDiscourseTopicJsonTrack(info);
+                attempts.push(jsonResult);
+                if (isConfirmedDiscourseAttempt(jsonResult)) {
+                    return { confirmed: true, accepted: true, confirmedBy: 'topic-json-header', attempts };
+                }
+            } catch (error) {
+                attempts.push({ endpoint: 'topic-json-fallback', ok: false, error: serializeDiscourseError(error) });
+            }
+        }
+
+        const accepted = attempts.some(isAcceptedDiscourseAttempt);
+        return {
+            confirmed: false,
+            accepted,
+            confirmedBy: accepted ? 'http-ok-without-track-header' : null,
+            attempts,
+        };
+    }
+
+    async function trackDiscourseTopicView(info, source, referrerUrl, force) {
+        if (!info || info.url.origin !== location.origin) return;
+
+        const token = claimDiscourseTrack(info, source, Boolean(force));
+        if (!token) return;
+
+        try {
+            discourseLog('track start', { source, topicId: info.topicId, url: info.url.href });
+            const result = await sendDiscourseTrackRequest(info, referrerUrl);
+            discourseLog('track result', { source, topicId: info.topicId, result });
+
+            if (result.confirmed || result.accepted) {
+                markDiscourseTrackDone(info, token, result);
+            } else {
+                clearDiscourseStateIfTokenMatches(info, token);
+                discourseWarn('track not accepted', { source, topicId: info.topicId, result });
+            }
+        } catch (error) {
+            clearDiscourseStateIfTokenMatches(info, token);
+            discourseWarn('track fatal error', { source, topicId: info.topicId, error: serializeDiscourseError(error) });
+        }
+    }
+
+    function trackCurrentDiscourseTopic(source, force) {
+        const info = getCurrentDiscourseTopicInfo();
+        if (info) trackDiscourseTopicView(info, source, document.referrer || '', Boolean(force));
+    }
+
+    function scheduleDiscourseTopicPageFallback() {
+        if (!getCurrentDiscourseTopicInfo()) return;
+
+        const schedule = () => {
+            DISCOURSE_TRACK_CONFIG.topicPageFallbackDelaysMs.forEach(delay => {
+                setTimeout(() => {
+                    trackCurrentDiscourseTopic(`topic-page-fallback-${delay}ms`, false);
+                }, delay);
+            });
+        };
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', schedule, { once: true });
+        } else {
+            schedule();
+        }
+    }
+
+    function trackDiscourseLinkIfNeeded(link, source, referrerUrl) {
+        const info = link && link.href ? getDiscourseTopicInfo(link.href) : null;
+        if (info) trackDiscourseTopicView(info, source, referrerUrl || location.href, false);
+    }
+
     // 全局鼠标移动：拖动 + resize
     document.addEventListener('mousemove', (e) => {
         buttons.forEach((b) => {
@@ -800,7 +1177,7 @@
             case 'setWatermarkText': setWatermarkText(); break;
             case 'setWatermarkOpacity': setWatermarkOpacity(); break;
             case 'about':
-                alert('CMD 锁定切换 v1.0.9\n\n作者：wlzh\n\n一手吃东西，一手用鼠标，也能轻松新标签页打开链接！\n\n功能：\n- 点击图标锁定/解锁 CMD 键\n- 可拖动位置，支持多个按钮\n- 右键增减按钮（可设数量）\n- 按百分比放大/缩小（可设比例）\n- 支持圆形/正方形/长方形切换\n- 水印模式：纯文字水印，可设文字和透明度');
+                alert('CMD 锁定切换 v1.1.0\n\n作者：wlzh\n\n一手吃东西，一手用鼠标，也能轻松新标签页打开链接！\n\n功能：\n- 点击图标锁定/解锁 CMD 键\n- 可拖动位置，支持多个按钮\n- 右键增减按钮（可设数量）\n- 按百分比放大/缩小（可设比例）\n- 支持圆形/正方形/长方形切换\n- 水印模式：纯文字水印，可设文字和透明度\n- Linux.do / IDCFlare 话题新标签打开自动补发浏览计数');
                 break;
         }
         hideMenu();
@@ -819,9 +1196,26 @@
             if (!e.metaKey && !e.ctrlKey && !e.shiftKey) {
                 e.preventDefault();
                 e.stopPropagation();
+                e.stopImmediatePropagation();
                 GM_openInTab(target.href, { active: false, insert: true, setParent: true });
+                trackDiscourseLinkIfNeeded(target, 'cmd-lock-background-open', location.href);
             }
         }
+    }, true);
+
+    document.addEventListener('click', (e) => {
+        const link = e.target?.closest?.('a[href]');
+        if (!link || e.button !== 0) return;
+        const source = e.metaKey || e.ctrlKey || e.shiftKey || e.altKey
+            ? 'modified-left-click'
+            : 'plain-left-click';
+        trackDiscourseLinkIfNeeded(link, source, location.href);
+    }, true);
+
+    document.addEventListener('auxclick', (e) => {
+        if (e.button !== 1) return;
+        const link = e.target?.closest?.('a[href]');
+        trackDiscourseLinkIfNeeded(link, 'middle-click', location.href);
     }, true);
 
     // ==================== 可见性保障 ====================
@@ -851,6 +1245,8 @@
     // ==================== 初始化 ====================
 
     document.body.appendChild(contextMenu);
+    cleanupOldDiscourseKeys();
+    scheduleDiscourseTopicPageFallback();
     initButtons();
     ensureButtonsVisible();
 
@@ -866,5 +1262,21 @@
         });
     }, 5000);
 
-    console.log('CMD 锁定切换脚本已加载 v1.0.9 - 作者：wlzh');
+    window.__cmdLockDiscourseTrackRetry = () => {
+        trackCurrentDiscourseTopic('manual-retry', true);
+    };
+
+    window.__cmdLockDiscourseTrackStatus = () => {
+        const info = getCurrentDiscourseTopicInfo();
+        console.log({
+            info,
+            state: info ? readDiscourseState(info) : null,
+            debug: discourseDebugEnabled(),
+            enableDebug: `localStorage.setItem("${DISCOURSE_TRACK_CONFIG.debugKey}", "1"); location.reload();`,
+            disableDebug: `localStorage.removeItem("${DISCOURSE_TRACK_CONFIG.debugKey}"); location.reload();`,
+            manualRetry: '__cmdLockDiscourseTrackRetry()',
+        });
+    };
+
+    console.log('CMD 锁定切换脚本已加载 v1.1.0 - 作者：wlzh');
 })();

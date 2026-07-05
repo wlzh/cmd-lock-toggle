@@ -21,10 +21,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 单文件 IIFE 结构，主要模块：
 
 - **状态管理**：`cmdLocked`、`isDragging`、`hasMoved` 等变量控制锁定与拖动状态
-- **持久化**：`localStorage` 存储按钮位置（key: `cmdLockPosition`）
+- **持久化**：`localStorage` 存储按钮位置和设置（主要 key: `cmdLockButtons`、`cmdLockBtnSize`、`cmdLockWatermark`）
 - **UI 组件**：`cmdBtn`（主按钮）+ `contextMenu`（右键菜单）+ `<style>` 注入
 - **事件流**：`mousedown/mousemove/mouseup` 区分点击与拖动（移动 >3px 视为拖动）；`contextmenu` 显示右键菜单；捕获阶段 `click` 拦截链接跳转
 - **链接拦截**：使用 `GM_openInTab` API，`active: false` 实现后台打开
+- **Discourse 追踪**：Linux.do / IDCFlare 话题链接会补发 `/pageview`，必要时 fallback 到 `/t/{topicId}.json?track_visit=true&forceLoad=true`
 
 ## 版本规范
 
@@ -33,7 +34,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 2. `README.md` 的更新日志（最新版本在最上方）
 3. 关于对话框中的版本号（`alert(...)` 内的字符串）
 
-版本号格式：`1.0.x`，当前为 `1.0.3`。
+版本号格式：`1.x.x`，当前为 `1.1.0`。
 
 ## 提交规范
 
