@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CMD 锁定，自动后台开链接 - 一手吃东西不影响
 // @namespace    http://tampermonkey.net/
-// @version      1.1.2
+// @version      1.1.3
 // @description  左下角图标点击锁定/解锁，自动后台打开新标签页；Linux.do/IDCFlare 话题新标签打开自动补发浏览计数。作者：wlzh
 // @author       wlzh
 // @match        *://*/*
@@ -21,6 +21,9 @@
     const MAX_BTN_COUNT = 20;
     const DRAG_THRESHOLD = 3;
     const HANDLE_SIZE = 8;
+    const BTN_COLOR_LOCKED = '#5f7568';
+    const BTN_COLOR_UNLOCKED = '#555';
+    const BTN_COLOR_LOCKED_RGB = '95, 117, 104';
     const DISCOURSE_TRACK_CONFIG = {
         supportedHosts: ['linux.do', 'idcflare.com'],
         pendingTtlMs: 120 * 1000,
@@ -29,7 +32,7 @@
         fetchTimeoutMs: 8000,
         enableTopicJsonFallback: false,
         debugKey: 'cmd-lock-discourse-track-debug',
-        prefix: 'cmd-lock-discourse-track-v1.1.2:',
+        prefix: 'cmd-lock-discourse-track-v1.1.3:',
         oldPrefixes: [
             'discourse-track-view-success:',
             'discourse-track-view-attempt:',
@@ -158,7 +161,7 @@
         }
         .cmd-lock-btn-instance:hover { transform: scale(1.1); }
         .cmd-lock-btn-instance:active { transform: scale(0.95); }
-        .cmd-lock-btn-instance.locked { box-shadow: 0 0 15px rgba(76, 175, 80, 0.6); }
+        .cmd-lock-btn-instance.locked { box-shadow: 0 0 10px rgba(95, 117, 104, 0.45); }
         .cmd-lock-btn-instance.watermark-mode {
             background: none !important;
             border: none !important;
@@ -327,7 +330,7 @@
         // 字体大小基于较小维度
         const fontSize = Math.max(10, Math.round(Math.min(watermarkWidth, watermarkHeight) * 0.15));
         // 透明度只影响文字颜色，背景完全透明
-        const color = locked ? `rgba(76, 175, 80, ${watermarkOpacity / 100})` : `rgba(0, 0, 0, ${watermarkOpacity / 100})`;
+        const color = locked ? `rgba(${BTN_COLOR_LOCKED_RGB}, ${watermarkOpacity / 100})` : `rgba(0, 0, 0, ${watermarkOpacity / 100})`;
         btn.innerHTML = `<span class="watermark-text" style="font-size:${fontSize}px; color:${color}">${watermarkText}</span>`;
 
         // 添加 resize 手柄
@@ -440,7 +443,7 @@
             buttons.forEach(b => {
                 const textEl = b.el.querySelector('.watermark-text');
                 if (textEl) {
-                    const color = b.locked ? `rgba(76, 175, 80, ${watermarkOpacity / 100})` : `rgba(0, 0, 0, ${watermarkOpacity / 100})`;
+                    const color = b.locked ? `rgba(${BTN_COLOR_LOCKED_RGB}, ${watermarkOpacity / 100})` : `rgba(0, 0, 0, ${watermarkOpacity / 100})`;
                     textEl.style.color = color;
                 }
             });
@@ -456,7 +459,7 @@
         const svgSize = Math.round(Math.min(getBtnWidth(), getBtnHeight()) * 0.55);
         btn.innerHTML = `
             <svg width="${svgSize}" height="${svgSize}" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <rect x="2" y="4" width="20" height="16" rx="2" stroke="white" stroke-width="2" fill="${locked ? '#4CAF50' : '#666'}"/>
+                <rect x="2" y="4" width="20" height="16" rx="2" stroke="white" stroke-width="2" fill="${locked ? BTN_COLOR_LOCKED : BTN_COLOR_UNLOCKED}"/>
                 <path d="M7 10h10M7 14h6" stroke="white" stroke-width="2" stroke-linecap="round"/>
             </svg>
         `;
@@ -477,7 +480,7 @@
         Object.assign(btn.style, {
             left: state.x + 'px',
             top: state.y + 'px',
-            backgroundColor: state.locked ? '#4CAF50' : '#666',
+            backgroundColor: state.locked ? BTN_COLOR_LOCKED : BTN_COLOR_UNLOCKED,
         });
 
         if (watermarkMode) {
@@ -575,16 +578,16 @@
             // 水印模式：只改文字颜色
             const textEl = btn.querySelector('.watermark-text');
             if (textEl) {
-                const color = locked ? `rgba(76, 175, 80, ${watermarkOpacity / 100})` : `rgba(0, 0, 0, ${watermarkOpacity / 100})`;
+                const color = locked ? `rgba(${BTN_COLOR_LOCKED_RGB}, ${watermarkOpacity / 100})` : `rgba(0, 0, 0, ${watermarkOpacity / 100})`;
                 textEl.style.color = color;
             }
         } else {
             if (locked) {
                 btn.classList.add('locked');
-                btn.style.backgroundColor = '#4CAF50';
+                btn.style.backgroundColor = BTN_COLOR_LOCKED;
             } else {
                 btn.classList.remove('locked');
-                btn.style.backgroundColor = '#666';
+                btn.style.backgroundColor = BTN_COLOR_UNLOCKED;
             }
             updateButtonAppearance(btn, locked);
         }
@@ -989,7 +992,7 @@
                     const textEl = bb.el.querySelector('.watermark-text');
                     if (textEl) {
                         textEl.style.fontSize = Math.max(10, Math.round(Math.min(newW, newH) * 0.15)) + 'px';
-                        const color = bb.locked ? `rgba(76, 175, 80, ${watermarkOpacity / 100})` : `rgba(0, 0, 0, ${watermarkOpacity / 100})`;
+                        const color = bb.locked ? `rgba(${BTN_COLOR_LOCKED_RGB}, ${watermarkOpacity / 100})` : `rgba(0, 0, 0, ${watermarkOpacity / 100})`;
                         textEl.style.color = color;
                     }
                 });
@@ -1174,7 +1177,7 @@
             case 'setWatermarkText': setWatermarkText(); break;
             case 'setWatermarkOpacity': setWatermarkOpacity(); break;
             case 'about':
-                alert('CMD 锁定切换 v1.1.2\n\n作者：wlzh\n\n一手吃东西，一手用鼠标，也能轻松新标签页打开链接！\n\n功能：\n- 点击图标锁定/解锁 CMD 键\n- 可拖动位置，支持多个按钮\n- 右键增减按钮（可设数量）\n- 按百分比放大/缩小（可设比例）\n- 支持圆形/正方形/长方形切换\n- 水印模式：纯文字水印，可设文字和透明度\n- Linux.do / IDCFlare 话题新标签打开自动补发浏览计数');
+                alert('CMD 锁定切换 v1.1.3\n\n作者：wlzh\n\n一手吃东西，一手用鼠标，也能轻松新标签页打开链接！\n\n功能：\n- 点击图标锁定/解锁 CMD 键\n- 可拖动位置，支持多个按钮\n- 右键增减按钮（可设数量）\n- 按百分比放大/缩小（可设比例）\n- 支持圆形/正方形/长方形切换\n- 水印模式：纯文字水印，可设文字和透明度\n- Linux.do / IDCFlare 话题新标签打开自动补发浏览计数');
                 break;
         }
         hideMenu();
@@ -1275,5 +1278,5 @@
         });
     };
 
-    console.log('CMD 锁定切换脚本已加载 v1.1.2 - 作者：wlzh');
+    console.log('CMD 锁定切换脚本已加载 v1.1.3 - 作者：wlzh');
 })();
