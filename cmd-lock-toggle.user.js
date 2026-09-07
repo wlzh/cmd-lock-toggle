@@ -1,10 +1,11 @@
 // ==UserScript==
 // @name         CMD 锁定，自动后台开链接 - 一手吃东西不影响
 // @namespace    http://tampermonkey.net/
-// @version      1.1.3
-// @description  左下角图标点击锁定/解锁，自动后台打开新标签页；Linux.do/IDCFlare 话题新标签打开自动补发浏览计数。作者：wlzh
+// @version      1.1.4
+// @description  在 Linux.do 主域名及子域名中，点击左下角图标锁定/解锁，并自动在后台打开新标签页。作者：wlzh
 // @author       wlzh
-// @match        *://*/*
+// @match        https://linux.do/*
+// @match        https://*.linux.do/*
 // @grant        GM_openInTab
 // @run-at       document-end
 // @noframes
@@ -1177,7 +1178,7 @@
             case 'setWatermarkText': setWatermarkText(); break;
             case 'setWatermarkOpacity': setWatermarkOpacity(); break;
             case 'about':
-                alert('CMD 锁定切换 v1.1.3\n\n作者：wlzh\n\n一手吃东西，一手用鼠标，也能轻松新标签页打开链接！\n\n功能：\n- 点击图标锁定/解锁 CMD 键\n- 可拖动位置，支持多个按钮\n- 右键增减按钮（可设数量）\n- 按百分比放大/缩小（可设比例）\n- 支持圆形/正方形/长方形切换\n- 水印模式：纯文字水印，可设文字和透明度\n- Linux.do / IDCFlare 话题新标签打开自动补发浏览计数');
+                alert('CMD 锁定切换 v1.1.4\n\n作者：wlzh\n\n一手吃东西，一手用鼠标，也能轻松新标签页打开链接！\n\n适用范围：\n- Linux.do 主域名及所有子域名\n\n功能：\n- 点击图标锁定/解锁 CMD 键\n- 可拖动位置，支持多个按钮\n- 右键增减按钮（可设数量）\n- 按百分比放大/缩小（可设比例）\n- 支持圆形/正方形/长方形切换\n- 水印模式：纯文字水印，可设文字和透明度\n- Linux.do 话题新标签打开自动补发浏览计数');
                 break;
         }
         hideMenu();
@@ -1278,5 +1279,5 @@
         });
     };
 
-    console.log('CMD 锁定切换脚本已加载 v1.1.3 - 作者：wlzh');
+    console.log('CMD 锁定切换脚本已加载 v1.1.4 - 作者：wlzh');
 })();
